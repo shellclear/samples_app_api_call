@@ -1,0 +1,251 @@
+---
+- name: "Sample AAP API calls"
+  hosts: "localhost"
+  gather_facts: False
+  vars:
+    controller_hostname: "controller01"
+    controller_username: "admin"
+    controller_password: "admin"
+    inventory_name: "inventory"
+    host_name: "host"
+    organization_name: "organization"
+  tasks:
+    - name: "Get the token"
+      uri:
+        url: "https://{{ controller_hostname }}/api/v2/users/1/personal_tokens/"
+        method: "POST"
+        validate_certs: False
+        return_content: True
+        user: "{{ controller_username }}"
+        password: "{{ controller_password }}"
+        force_basic_auth: True
+        status_code: 201
+      register: "token_response"
+
+    - name: "DEBUG: New token"
+      debug:
+        var: token_response['json']['token']
+    
+    - name: "Set token fact"
+      set_fact:
+        api_token: "{{ token_response['json']['token'] }}"
+
+    - name: "Create organization"
+      uri:
+        url: "https://{{ controller_hostname }}/api/v2/organizations/"
+        validate_certs: False
+        method: "POST"
+        return_content: True 
+        headers:
+          Authorization: "Bearer {{ api_token }}"
+          Content-Type: "application/json"
+        body_format: "json"
+        body: "{\"name\": \"{{ organization_name }}\"}"
+        status_code: 201
+      register: "organization_result"
+
+    - name: "DEBUG: Organization create message"
+      debug:
+        var: organization_result['msg']
+
+    - name: "list organizations"
+      uri:
+        url: "https://{{ controller_hostname }}/api/v2/organizations?search={{ organization_name }}"
+        validate_certs: False
+        method: "GET"
+        return_content: True 
+        headers:
+          Authorization: "Bearer {{ api_token }}"
+          Content-Type: "application/json"
+      register: "list_organization_result"
+
+    - name: "DEBUG: List of organizations"
+      debug:
+        msg: "Organization ID: {{ organization['id'] }}"
+      loop: "{{ list_organization_result['json']['results'] }}"
+      loop_control:
+        loop_var: "organization"
+        label: "Organization name: {{ organization['name'] }}"
+      when: 
+        - organization['name'] == organization_name
+
+    - name: "Set organization id fact"
+      set_fact:
+        organization_id: "{{ organization['id'] }}"
+      loop: "{{ list_organization_result['json']['results'] }}"
+      loop_control:
+        loop_var: "organization"
+        label: "{{ organization['id'] }}"
+      when: 
+        - organization['name'] == organization_name
+
+    - name: "Create inventory"
+      uri:
+        url: "https://{{ controller_hostname }}/api/v2/inventories/"
+        validate_certs: False
+        method: "POST"
+        return_content: True
+        headers:
+          Authorization: "Bearer {{ api_token }}"
+          Content-Type: "application/json"
+        body_format: "json"
+        body: "{\"name\": \"{{ inventory_name }}\", \"organization\": \"{{ organization_id }}\" }"
+          # {
+          #   "name": {{ inventory_name }},
+          #   "organization": {{ organization_id }}
+          # }
+        # name: "{{ inventory_name }}"
+        # organization: "{{ organization_id }}"
+        # variables: |
+        #   Country: "Spain"
+        #   Community: Basque Country
+        status_code: 201
+      register: "inventory_result"
+
+    - name: "DEBUG: Inventory create message"
+      debug:
+        var: inventory_result['msg']
+    
+    - name: "list inventories"
+      uri:
+        url: "https://{{ controller_hostname }}/api/v2/inventories?search={{ inventory_name }}"
+        validate_certs: False
+        method: "GET"
+        return_content: True
+        headers:
+          Authorization: "Bearer {{ api_token }}"
+          Content-Type: "application/json"
+      register: "list_inventory_result"
+
+    - name: "DEBUG: List of inventories"
+      debug:
+        msg: "Inventory ID: {{ inventory['id'] }}"
+      loop: "{{ list_inventory_result['json']['results'] }}"
+      loop_control:
+        loop_var: "inventory"
+        label: "Inventory Name: {{ inventory['name'] }}"
+      when: 
+        - inventory['name'] == inventory_name
+
+    - name: "Set inventory id fact"
+      set_fact:
+        inventory_id: "{{ inventory['id'] }}"
+      loop: "{{ list_inventory_result['json']['results'] }}"
+      loop_control:
+        loop_var: "inventory"
+        label: "{{ inventory['id'] }}"
+      when: 
+        - inventory['name'] == inventory_name
+
+    - name: "list nodes from inventory"
+      uri:
+        url: "https://{{ controller_hostname }}/api/v2/inventories/{{ inventory_id }}/hosts/"
+        validate_certs: False
+        method: "GET"
+        return_content: True
+        headers:
+          Authorization: "Bearer {{ api_token }}"
+          Content-Type: "application/json"
+      register: "host_from_inventory_result"
+  
+    - name: "DEBUG: List of hosts"
+      debug:
+        msg: "Host ID: {{ host['id'] }}"
+      loop: "{{ host_from_inventory_result['json']['results'] }}"
+      loop_control:
+        label: "Host Name: {{ host['name'] }}"
+        loop_var: "host"
+
+    - name: "Adding new host to the inventory" # quando o host ja existe no inventario recebemos esta mensagem:"content": "{\"__all__\":[\"Host with this Name and Inventory already exists.\"]}"
+      uri:
+        url: "https://{{ controller_hostname }}/api/v2/inventories/{{ inventory_id }}/hosts/" # Atencao com as barras no final do endpoint pois sem elas o POST falha. Tenho que descobrir o motivo disso.
+        validate_certs: False
+        method: "POST" 
+        return_content: True
+        headers:
+          Authorization: "Bearer {{ api_token }}"
+          Content-Type: "application/json"
+        body_format: "json"
+        body:
+          name: "{{ host_name }}"
+          description: "Host added by Ansible: {{ host_name }}"
+          variables: |
+            packages:
+              - htop
+              - git
+            environments:
+              http_proxy: http://192.168.0.1:3128
+              https_proxy: http://192.168.0.1:3128
+        status_code: 201
+      register: "add_host_inventory_result"
+
+    - name: "DEBUG: Created host"
+      debug:
+        msg: 
+          - "Host name: {{ add_host_inventory_result['json']['name'] }}"
+          - "Host ID: {{ add_host_inventory_result['json']['id'] }}"
+          - "Host Description: {{ add_host_inventory_result['json']['description'] }}"
+    
+    - name: "Pause to check resources created"
+      pause:
+        prompt: "Go to the aap interface and check if organization, inventory and host were created"
+
+    - name: "Set host id fact"
+      set_fact:
+        host_id: "{{ add_host_inventory_result['json']['id'] }}"
+
+    - name: "Delete host from inventory"
+      uri:
+        url: "https://{{ controller_hostname }}/api/v2/inventories/{{ inventory_id }}/hosts/"
+        validate_certs: False
+        method: "POST"
+        return_content: True
+        headers:
+          Authorization: "Bearer {{ api_token }}"
+          Content-Type: "application/json"
+        status_code: 204
+        body: | #"{\"id\": {{ host_id }}, \"disassociate\": \"true\"}"
+          { 
+            "id": {{ host_id }},
+            "disassociate": "true"
+          }
+        # id: "{{ host_id }}" # nao reconhece como inteiro e falha: {"msg": "\"id\" field must be an integer."}
+        # disassociate: true
+        body_format: "json"
+      register: "delete_host_inventory_result"
+
+    - name: "DEBUG: Remove host from inventory message"
+      debug:
+        var: delete_host_inventory_result['msg']
+
+    - name: "Delete inventory"
+      uri:
+        url: "https://{{ controller_hostname }}/api/v2/inventories/{{ inventory_id }}/"
+        validate_certs: False
+        method: "DELETE"
+        return_content: True
+        headers:
+          Authorization: "Bearer {{ api_token }}"
+          Content-Type: "application/json"
+        status_code: 202
+      register: "delete_inventory_result"
+
+    - name: "DEBUG: Remove inventory message"
+      debug:
+        var: delete_inventory_result['msg']
+
+    - name: "Delete organization"
+      uri:
+        url: "https://{{ controller_hostname }}/api/v2/organizations/{{ organization_id }}/"
+        validate_certs: False
+        method: "DELETE"
+        return_content: True
+        headers:
+          Authorization: "Bearer {{ api_token }}"
+          Content-Type: "application/json"
+        status_code: 204
+      register: delete_organization_result
+
+    - name: "DEBUG: Remove organization message"
+      debug:
+        var: delete_organization_result['msg']
