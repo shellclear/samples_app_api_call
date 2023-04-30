@@ -1,0 +1,1 @@
+This repos contains examples of how to create resources in AAP using Ansible uri module from the ansible.builtin collection
