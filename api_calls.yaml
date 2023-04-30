@@ -11,7 +11,7 @@
     organization_name: "organization"
   tasks:
     - name: "Get the token"
-      uri:
+      ansible.builtin.uri:
         url: "https://{{ controller_hostname }}/api/v2/users/1/personal_tokens/"
         method: "POST"
         validate_certs: False
@@ -22,8 +22,8 @@
         status_code: 201
       register: "token_response"
 
-    - name: "DEBUG: New token"
-      debug:
+    - name: "DEBUG New token"
+      ansible.builtin.debug:
         var: token_response['json']['token']
     
     - name: "Set token fact"
@@ -31,7 +31,7 @@
         api_token: "{{ token_response['json']['token'] }}"
 
     - name: "Create organization"
-      uri:
+      ansible.builtin.uri:
         url: "https://{{ controller_hostname }}/api/v2/organizations/"
         validate_certs: False
         method: "POST"
@@ -45,11 +45,11 @@
       register: "organization_result"
 
     - name: "DEBUG: Organization create message"
-      debug:
+      ansible.builtin.debug:
         var: organization_result['msg']
 
-    - name: "list organizations"
-      uri:
+    - name: "Get organizations list"
+      ansible.builtin.uri:
         url: "https://{{ controller_hostname }}/api/v2/organizations?search={{ organization_name }}"
         validate_certs: False
         method: "GET"
@@ -60,7 +60,7 @@
       register: "list_organization_result"
 
     - name: "DEBUG: List of organizations"
-      debug:
+      ansible.builtin.debug:
         msg: "Organization ID: {{ organization['id'] }}"
       loop: "{{ list_organization_result['json']['results'] }}"
       loop_control:
@@ -80,7 +80,7 @@
         - organization['name'] == organization_name
 
     - name: "Create inventory"
-      uri:
+      ansible.builtin.uri:
         url: "https://{{ controller_hostname }}/api/v2/inventories/"
         validate_certs: False
         method: "POST"
@@ -103,11 +103,11 @@
       register: "inventory_result"
 
     - name: "DEBUG: Inventory create message"
-      debug:
+      ansible.builtin.debug:
         var: inventory_result['msg']
     
-    - name: "list inventories"
-      uri:
+    - name: "Get inventories list"
+      ansible.builtin.uri:
         url: "https://{{ controller_hostname }}/api/v2/inventories?search={{ inventory_name }}"
         validate_certs: False
         method: "GET"
@@ -118,7 +118,7 @@
       register: "list_inventory_result"
 
     - name: "DEBUG: List of inventories"
-      debug:
+      ansible.builtin.debug:
         msg: "Inventory ID: {{ inventory['id'] }}"
       loop: "{{ list_inventory_result['json']['results'] }}"
       loop_control:
@@ -137,8 +137,8 @@
       when: 
         - inventory['name'] == inventory_name
 
-    - name: "list nodes from inventory"
-      uri:
+    - name: "List nodes from inventory"
+      ansible.builtin.uri:
         url: "https://{{ controller_hostname }}/api/v2/inventories/{{ inventory_id }}/hosts/"
         validate_certs: False
         method: "GET"
@@ -149,7 +149,7 @@
       register: "host_from_inventory_result"
   
     - name: "DEBUG: List of hosts"
-      debug:
+      ansible.builtin.debug:
         msg: "Host ID: {{ host['id'] }}"
       loop: "{{ host_from_inventory_result['json']['results'] }}"
       loop_control:
@@ -157,7 +157,7 @@
         loop_var: "host"
 
     - name: "Adding new host to the inventory" # quando o host ja existe no inventario recebemos esta mensagem:"content": "{\"__all__\":[\"Host with this Name and Inventory already exists.\"]}"
-      uri:
+      ansible.builtin.uri:
         url: "https://{{ controller_hostname }}/api/v2/inventories/{{ inventory_id }}/hosts/" # Atencao com as barras no final do endpoint pois sem elas o POST falha. Tenho que descobrir o motivo disso.
         validate_certs: False
         method: "POST" 
@@ -180,7 +180,7 @@
       register: "add_host_inventory_result"
 
     - name: "DEBUG: Created host"
-      debug:
+      ansible.builtin.debug:
         msg: 
           - "Host name: {{ add_host_inventory_result['json']['name'] }}"
           - "Host ID: {{ add_host_inventory_result['json']['id'] }}"
@@ -195,7 +195,7 @@
         host_id: "{{ add_host_inventory_result['json']['id'] }}"
 
     - name: "Delete host from inventory"
-      uri:
+      ansible.builtin.uri:
         url: "https://{{ controller_hostname }}/api/v2/inventories/{{ inventory_id }}/hosts/"
         validate_certs: False
         method: "POST"
@@ -215,11 +215,11 @@
       register: "delete_host_inventory_result"
 
     - name: "DEBUG: Remove host from inventory message"
-      debug:
+      ansible.builtin.debug:
         var: delete_host_inventory_result['msg']
 
     - name: "Delete inventory"
-      uri:
+      ansible.builtin.uri:
         url: "https://{{ controller_hostname }}/api/v2/inventories/{{ inventory_id }}/"
         validate_certs: False
         method: "DELETE"
@@ -231,11 +231,11 @@
       register: "delete_inventory_result"
 
     - name: "DEBUG: Remove inventory message"
-      debug:
+      ansible.builtin.debug:
         var: delete_inventory_result['msg']
 
     - name: "Delete organization"
-      uri:
+      ansible.builtin.uri:
         url: "https://{{ controller_hostname }}/api/v2/organizations/{{ organization_id }}/"
         validate_certs: False
         method: "DELETE"
@@ -247,5 +247,5 @@
       register: delete_organization_result
 
     - name: "DEBUG: Remove organization message"
-      debug:
+      ansible.builtin.debug:
         var: delete_organization_result['msg']
